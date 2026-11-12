@@ -6,19 +6,30 @@ public class PaymentProcessor {
     private final ExecutorService paymentPool = Executors.newFixedThreadPool(3);
     private final InventoryManager inventoryManager;
     private final BlockingQueue<CustomerOrder> warehouseQueue;
+    private final NotificationService notificationService;
     private final AtomicInteger successfulPayments = new AtomicInteger(0);
     private final AtomicInteger failedPayments = new AtomicInteger(0);
     private final Random random = new Random();
 
+public PaymentProcessor(
+        InventoryManager inventoryManager,
+        BlockingQueue<CustomerOrder> warehouseQueue) {
+    this(inventoryManager, warehouseQueue, new NotificationService());
+}
 
-public PaymentProcessor(InventoryManager inventoryManager, BlockingQueue<CustomerOrder> warehouseQueue) {
-    if (inventoryManager == null || warehouseQueue == null) {
+public PaymentProcessor(
+        InventoryManager inventoryManager,
+        BlockingQueue<CustomerOrder> warehouseQueue,
+        NotificationService notificationService) {
+    if (inventoryManager == null || warehouseQueue == null
+            || notificationService == null) {
         throw new IllegalArgumentException(
-                "Inventory manager and warehouse queue are required"
+                "Inventory manager, warehouse queue, and notification service are required"
         );
     }
     this.inventoryManager = inventoryManager;
     this.warehouseQueue = warehouseQueue;
+    this.notificationService = notificationService;
 }
 
 public void submitOrder(CustomerOrder order) {
@@ -42,37 +53,41 @@ public boolean processPayment(CustomerOrder order) {
             return false;
         }
 
-        Thread.sleep(15);
+        Thread.sleep(90);
 
         boolean paymentApproved = random.nextInt(100) < 87;
 
-        if (paymentApproved && order.updateStatus(OrderStatus.PAID)) {
-            successfulPayments.incrementAndGet();
-            warehouseQueue.put(order);
-            return true;
-        } else {
-            if(order.getStatus() != OrderStatus.CANCELLED) {
-                order.updateStatus(OrderStatus.PAYMENT_FAILED);
+        if (paymentApproved) {
+            synchronized (order) {
+                if (!order.updateStatus(OrderStatus.PAID)) {
+                    return false;
+                }
+                warehouseQueue.offer(order);
+                successfulPayments.incrementAndGet();
             }
-            failedPayments.incrementAndGet();
-            inventoryManager.releaseStock(order);
-            return false;       
+            return true;
         }
 
+        markPaymentFailed(order);
+        return false;
     }
     catch (InterruptedException e) {
+        markPaymentFailed(order);
         Thread.currentThread().interrupt();
-        order.updateStatus(OrderStatus.PAYMENT_FAILED);
-        failedPayments.incrementAndGet();
-        inventoryManager.releaseStock(order);
         return false;
     }
     catch (RuntimeException e) {
         System.err.println("Error processing payment for order " + order.getOrderId() + ": " + e.getMessage());
-        order.updateStatus(OrderStatus.PAYMENT_FAILED);
+        markPaymentFailed(order);
+        return false;
+    }
+}
+
+private void markPaymentFailed(CustomerOrder order) {
+    if (order.updateStatus(OrderStatus.PAYMENT_FAILED)) {
         failedPayments.incrementAndGet();
         inventoryManager.releaseStock(order);
-        return false;
+        notificationService.sendPaymentFailedNotification(order);
     }
 }
 

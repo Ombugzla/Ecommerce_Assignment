@@ -23,6 +23,13 @@ public class CustomerOrder {
                     "Product name cannot be blank"
             );
         }
+        String normalizedProductName = productName.trim();
+        if (!normalizedProductName.equals("Product A")
+                && !normalizedProductName.equals("Product B")) {
+            throw new IllegalArgumentException(
+                    "Product not available."
+            );
+        }
         if (customerName == null || customerName.isBlank()) {
             throw new IllegalArgumentException(
                     "Customer name cannot be blank"
@@ -31,7 +38,7 @@ public class CustomerOrder {
 
         this.orderId = orderId;
         this.customerId = customerId;
-        this.productName = productName.trim();
+        this.productName = normalizedProductName;
         this.quantity = quantity;
         this.customerName = customerName.trim();
         this.status = OrderStatus.RECEIVED;
@@ -71,10 +78,19 @@ public class CustomerOrder {
     }
 
     public synchronized boolean updateStatus(OrderStatus newStatus) {
-        if (newStatus == null || !canTransitionTo(newStatus)) {
+        if (newStatus == null || newStatus == OrderStatus.CANCELLED
+                || !canTransitionTo(newStatus)) {
             return false;
         }
         status = newStatus;
+        return true;
+    }
+
+    synchronized boolean cancel() {
+        if (!canTransitionTo(OrderStatus.CANCELLED)) {
+            return false;
+        }
+        status = OrderStatus.CANCELLED;
         return true;
     }
 

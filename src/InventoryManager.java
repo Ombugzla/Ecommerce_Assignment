@@ -7,12 +7,18 @@ public class InventoryManager {
     private HashMap<Integer, Reservation> reservations;
 
     public InventoryManager() {
+        this(100, 50);
+    }
+
+    public InventoryManager(int productAStock, int productBStock) {
+        if (productAStock < 0 || productBStock < 0) {
+            throw new IllegalArgumentException("Stock cannot be negative");
+        }
         inventory = new HashMap<>();
         reservations = new HashMap<>();
 
-        inventory.put("Product A", 100);
-        inventory.put("Product B", 50);
-
+        inventory.put("Product A", productAStock);
+        inventory.put("Product B", productBStock);
     }
     private enum ReservationStatus {
         RESERVED,
@@ -38,7 +44,7 @@ public class InventoryManager {
         return inventory.get(productName);
     }
     public synchronized boolean reserveStock(CustomerOrder order){
-        if (order == null) {
+        if (order == null || order.getStatus() != OrderStatus.RECEIVED) {
             return false;
         }
 
@@ -85,6 +91,15 @@ public class InventoryManager {
             return true;
 
     }
+
+    public synchronized boolean cancelOrder(CustomerOrder order) {
+        if (order == null || !order.cancel()) {
+            return false;
+        }
+        releaseStock(order);
+        return true;
+    }
+
     public synchronized boolean consumeStock(CustomerOrder order) {
         if (order == null) {
             return false;

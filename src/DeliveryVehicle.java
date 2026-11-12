@@ -25,7 +25,7 @@ public class DeliveryVehicle {
             " is delivering Order " + order.getOrderId()
         );
 
-        Thread.sleep(1500);
+        Thread.sleep(120);
 
         System.out.println(
             "Vehicle " + vehicleId +
